@@ -41,8 +41,10 @@ def preds_to_proba(preds, eps=1e-3, proba_beta=50):
     return preds
     
 def split_indices(N, frac=0.2, max_val_count=1024, random_split=True):
-    n_train = N - min(int(frac*N), max_val_count)
-    n_train = n_train + n_train%2 # ensure even train samples
+    val_count = min(max(int(frac * N), 1), max_val_count) if N > 1 else 0
+    n_train = N - val_count
+    if n_train > 1 and n_train % 2 == 1:
+        n_train -= 1 # ensure even train samples without emptying validation
     
     if random_split:
         indices = list(range(N))

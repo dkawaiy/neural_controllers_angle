@@ -1,0 +1,17 @@
+# Local CPU/Mac smoke-test environment.
+# Install with:
+#   python3 -m venv .venv
+#   .venv/bin/python -m pip install -r requirements-local.txt
+
+torch==2.4.0
+transformers==4.47.0
+datasets==3.1.0
+numpy==1.26.4
+tqdm==4.67.3
+torchmetrics==1.9.0
+scikit-learn==1.7.2
+pandas==2.3.3
+matplotlib==3.10.9
+accelerate==1.13.0
+peft==0.19.1
+xrfm @ git+https://github.com/dmbeaglehole/xRFM.git@773fae81097ab000e6e7292a295e1d24adacca55

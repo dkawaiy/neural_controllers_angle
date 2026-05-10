@@ -128,6 +128,22 @@ def compute_prediction_metrics(preds, labels, classification_threshold=0.5):
     metrics = {'acc': acc, 'precision': precision, 'recall': recall, 'f1': f1, 'auc': auc, 'mse': mse}
     return metrics
 
+
+def get_num_hidden_layers(model):
+    """Return transformer block count across common decoder-only model families."""
+    if hasattr(model, "model") and hasattr(model.model, "layers"):
+        return len(model.model.layers)
+    if hasattr(model, "gpt_neox") and hasattr(model.gpt_neox, "layers"):
+        return len(model.gpt_neox.layers)
+    if hasattr(model, "transformer") and hasattr(model.transformer, "h"):
+        return len(model.transformer.h)
+    if hasattr(model.config, "num_hidden_layers"):
+        return int(model.config.num_hidden_layers)
+    if hasattr(model.config, "n_layer"):
+        return int(model.config.n_layer)
+    raise AttributeError("Could not infer the number of transformer layers for this model.")
+
+
 def get_hidden_states(prompts, model, tokenizer, hidden_layers, forward_batch_size, rep_token=-1, all_positions=False):
 
     if isinstance(prompts, np.ndarray):
@@ -178,7 +194,7 @@ def get_hidden_states(prompts, model, tokenizer, hidden_layers, forward_batch_si
                 num_layers = len(out_hidden_states)-1 # exclude embedding layer
             else:
                 outputs = model(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
-                num_layers = len(model.model.layers)
+                num_layers = get_num_hidden_layers(model)
                 out_hidden_states = outputs.hidden_states
             
             hidden_states_all_layers = []
@@ -186,6 +202,8 @@ def get_hidden_states(prompts, model, tokenizer, hidden_layers, forward_batch_si
                 
                 if use_concat:
                     hidden_states_all_layers.append(hidden_state[:,rep_token,:].detach().cpu())
+                elif layer_idx not in all_hidden_states:
+                    continue
                 elif all_positions:
                     all_hidden_states[layer_idx].append(hidden_state.detach().cpu())
                 else:

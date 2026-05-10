@@ -1,5 +1,11 @@
 logs
 results
+.venv/
+.venv-mps/
+.hf_cache/
+.mpl_cache/
+.cache/
+artifacts/
 .ipynb_checkpoints/
 delta_setup
 __pycache__
@@ -25,6 +31,7 @@ data/newton/
 data/politics/
 data/reviews/
 data/sentiment/
+data/translation_synthetic/
 directions_for_v2_paper/
 notebooks/reviews.ipynb
 notebooks/politics.ipynb

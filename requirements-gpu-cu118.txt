@@ -1,0 +1,22 @@
+# GPU server environment matching the paper repo README.
+# Install in a fresh venv/conda env on the server with:
+#   python -m pip install -r requirements-gpu-cu118.txt
+#
+# For other CUDA versions, change the PyTorch index and torch wheel suffix.
+
+--extra-index-url https://download.pytorch.org/whl/cu118
+
+torch==2.4.0+cu118
+transformers==4.47.0
+datasets==3.1.0
+numpy==1.26.4
+tqdm==4.67.3
+torchmetrics==1.9.0
+scikit-learn==1.7.2
+pandas==2.3.3
+matplotlib==3.10.9
+accelerate==1.13.0
+peft==0.19.1
+bitsandbytes==0.43.3
+trl==0.11.4
+xrfm @ git+https://github.com/dmbeaglehole/xRFM.git@773fae81097ab000e6e7292a295e1d24adacca55
