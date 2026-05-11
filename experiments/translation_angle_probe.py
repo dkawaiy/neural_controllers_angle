@@ -32,6 +32,11 @@ try:
 except ImportError:  # pragma: no cover - peft is optional for base-model probes.
     PeftModel = None
 
+try:
+    from xrfm import RFM
+except ImportError:  # pragma: no cover - xRFM is optional unless --extractors rfm is used.
+    RFM = None
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Small EN-ZH translation angle probe.")
@@ -43,12 +48,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fit-split", default=None, help="Split used to fit concept vectors.")
     parser.add_argument("--test-split", default=None, help="Independent split used to estimate/report concept-vector angles.")
     parser.add_argument("--layers", nargs="*", type=int, default=None, help="0-based transformer layer indices.")
-    parser.add_argument("--extractors", nargs="*", default=["mean_diff", "logistic"], choices=["mean_diff", "logistic", "mlp_agop"])
+    parser.add_argument("--extractors", nargs="*", default=["mean_diff", "logistic"], choices=["mean_diff", "logistic", "rfm", "mlp_agop"])
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--max-length", type=int, default=128)
     parser.add_argument("--bootstrap-samples", type=int, default=0)
     parser.add_argument("--bootstrap-seed", type=int, default=123)
     parser.add_argument("--bootstrap-mlp-agop", action="store_true", help="Also bootstrap MLP-AGOP; this is much slower.")
+    parser.add_argument("--bootstrap-rfm", action="store_true", help="Also bootstrap RFM; this is much slower.")
+    parser.add_argument("--rfm-iters", type=int, default=5)
+    parser.add_argument("--rfm-device", default="auto", choices=["auto", "cpu", "cuda"])
+    parser.add_argument("--rfm-bandwidths", nargs="*", type=float, default=[1.0, 10.0, 100.0])
+    parser.add_argument("--rfm-regs", nargs="*", type=float, default=[1e-3])
     parser.add_argument("--mlp-agop-steps", type=int, default=120)
     parser.add_argument("--mlp-agop-hidden", type=int, default=128)
     parser.add_argument("--mlp-agop-lr", type=float, default=1e-3)
@@ -252,16 +262,95 @@ def fit_mlp_agop(
     return vector, auc
 
 
+def fit_rfm(
+    x: np.ndarray,
+    y: np.ndarray,
+    iters: int,
+    bandwidths: list[float],
+    regs: list[float],
+    device: torch.device,
+) -> tuple[np.ndarray, float]:
+    if RFM is None:
+        raise ImportError("xrfm is required for --extractors rfm. Install requirements-local.txt or requirements-gpu-cu118.txt.")
+
+    x_tensor = torch.from_numpy(x).float().to(device)
+    y_tensor = torch.from_numpy(y.astype(np.float32)).reshape(-1, 1).to(device)
+    best_vector = None
+    best_auc = float("-inf")
+    best_error = None
+
+    for reg in regs:
+        for bandwidth in bandwidths:
+            for center_grads in [True, False]:
+                try:
+                    model = RFM(
+                        kernel="l2_high_dim",
+                        bandwidth=float(bandwidth),
+                        tuning_metric="auc",
+                        device=str(device),
+                        verbose=False,
+                    )
+                    model.fit(
+                        (x_tensor, y_tensor),
+                        (x_tensor, y_tensor),
+                        reg=float(reg),
+                        iters=iters,
+                        center_grads=center_grads,
+                        early_stop_rfm=True,
+                        get_agop_best_model=True,
+                        top_k=1,
+                        verbose=False,
+                    )
+                    agop = model.agop_best_model.detach().float().cpu()
+                    if agop.ndim != 2 or agop.shape[0] != agop.shape[1]:
+                        raise ValueError(f"Unexpected RFM AGOP shape: {tuple(agop.shape)}")
+                    eigenvalues, eigenvectors = torch.linalg.eigh(agop)
+                    vector = normalize(eigenvectors[:, -1].numpy().astype(np.float32))
+                    auc = projection_auc(x, y, vector)
+                    if auc < 0.5:
+                        vector = -vector
+                        auc = 1.0 - auc
+                    if auc > best_auc:
+                        best_auc = auc
+                        best_vector = vector
+                except Exception as exc:  # pragma: no cover - backend/device failures are environment-specific.
+                    best_error = exc
+                    continue
+
+    if best_vector is None:
+        raise RuntimeError(f"RFM fitting failed for all hyperparameters: {best_error}") from best_error
+    return best_vector, best_auc
+
+
+def select_rfm_device(device_arg: str, model_device: torch.device) -> torch.device:
+    if device_arg == "auto":
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        return torch.device("cpu")
+    if device_arg == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("--rfm-device cuda was requested, but CUDA is not available.")
+    return torch.device(device_arg)
+
+
 def make_fitters(args: argparse.Namespace, device: torch.device):
     agop_device = torch.device(args.mlp_agop_device)
     if agop_device.type == "mps" and not torch.backends.mps.is_available():
         agop_device = torch.device("cpu")
     if agop_device.type == "cuda" and not torch.cuda.is_available():
         agop_device = torch.device("cpu")
+    rfm_device = select_rfm_device(args.rfm_device, device)
     torch.manual_seed(args.seed)
     return {
         "mean_diff": fit_mean_diff,
         "logistic": fit_logistic,
+        "rfm": lambda x, y: fit_rfm(
+            x,
+            y,
+            iters=args.rfm_iters,
+            bandwidths=args.rfm_bandwidths,
+            regs=args.rfm_regs,
+            device=rfm_device,
+        ),
         "mlp_agop": lambda x, y: fit_mlp_agop(
             x,
             y,
@@ -332,6 +421,7 @@ def bootstrap_rows(
     extractors: list[str],
     fitters: dict,
     bootstrap_mlp_agop: bool,
+    bootstrap_rfm: bool,
     n_pairs: int,
     n_boot: int,
     seed: int,
@@ -339,7 +429,11 @@ def bootstrap_rows(
     if n_boot <= 0:
         return rows
     rng = np.random.default_rng(seed)
-    bootstrap_extractors = [name for name in extractors if name != "mlp_agop" or bootstrap_mlp_agop]
+    bootstrap_extractors = [
+        name
+        for name in extractors
+        if (name != "mlp_agop" or bootstrap_mlp_agop) and (name != "rfm" or bootstrap_rfm)
+    ]
     values: dict[tuple[str, int], dict[str, list[float]]] = {
         (row["extractor"], row["layer"]): {"cosine": [], "angle_degrees": []}
         for row in rows
@@ -492,6 +586,7 @@ def main() -> None:
         args.extractors,
         fitters,
         args.bootstrap_mlp_agop,
+        args.bootstrap_rfm,
         n_pairs=len(test_pairs),
         n_boot=args.bootstrap_samples,
         seed=args.bootstrap_seed,

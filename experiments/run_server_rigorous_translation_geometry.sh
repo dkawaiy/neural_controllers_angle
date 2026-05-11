@@ -52,8 +52,10 @@ DTYPE="${DTYPE:-bfloat16}"
 SEEDS="${SEEDS:-42 43 44}"
 MAX_STEPS="${MAX_STEPS:-60}"
 BOOTSTRAP="${BOOTSTRAP:-1000}"
-EXTRACTORS="${EXTRACTORS:-mean_diff logistic mlp_agop}"
+EXTRACTORS="${EXTRACTORS:-mean_diff logistic rfm}"
 MODEL_ID="${MODEL_ID:-Qwen/Qwen2.5-0.5B-Instruct}"
+BOOTSTRAP_RFM="${BOOTSTRAP_RFM:-0}"
+BOOTSTRAP_MLP_AGOP="${BOOTSTRAP_MLP_AGOP:-0}"
 
 echo "Starting rigorous translation geometry run..."
 echo "MODEL_ID=$MODEL_ID"
@@ -63,6 +65,7 @@ echo "SEEDS=$SEEDS"
 echo "MAX_STEPS=$MAX_STEPS"
 echo "BOOTSTRAP=$BOOTSTRAP"
 echo "EXTRACTORS=$EXTRACTORS"
+echo "BOOTSTRAP_RFM=$BOOTSTRAP_RFM"
 
 PYTHON="$PYTHON" \
 DEVICE="$DEVICE" \
@@ -72,5 +75,6 @@ MAX_STEPS="$MAX_STEPS" \
 BOOTSTRAP="$BOOTSTRAP" \
 EXTRACTORS="$EXTRACTORS" \
 MODEL_ID="$MODEL_ID" \
+BOOTSTRAP_RFM="$BOOTSTRAP_RFM" \
+BOOTSTRAP_MLP_AGOP="$BOOTSTRAP_MLP_AGOP" \
 bash experiments/run_rigorous_translation_geometry.sh
-

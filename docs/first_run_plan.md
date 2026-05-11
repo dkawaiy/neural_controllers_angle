@@ -137,11 +137,11 @@ The stricter angle probe can now:
 
 - fit/report separate geometry splits with `--fit-split` and `--test-split`;
 - bootstrap test-split angles with `--bootstrap-samples`;
-- run `mean_diff`, `logistic`, and `mlp_agop` extractors;
+- run `mean_diff`, `logistic`, and native `rfm` extractors by default;
 - save both `fit_rows` and independent test `rows`;
 - preserve CI columns in comparison CSVs.
 
-`mlp_agop` is a local RFM-style AGOP approximation: it trains a small MLP probe on hidden activations, computes per-sample input gradients, uses SVD on the gradient matrix, and takes the top right singular vector as the concept direction. The upstream xRFM path is still useful, but its current helper path assumes CUDA in places, so `mlp_agop` gives us a Mac/MPS-safe extractor now.
+`rfm` calls the upstream xRFM `RFM` implementation directly and takes the top eigenvector of `agop_best_model` as the concept direction. `mlp_agop` remains available only as a Mac/MPS-safe fallback approximation.
 
 The LoRA trainer can now:
 
@@ -176,7 +176,7 @@ SEEDS="42" MAX_STEPS=5 BOOTSTRAP=20 bash experiments/run_rigorous_translation_ge
 2. Generate translation-active vs control prompts with matched templates.
 3. Fine-tune LoRA on English to Chinese translation examples.
 4. Extract last-token activations for base and LoRA models.
-5. Fit mean-diff, logistic, and RFM/MLP-AGOP vectors per selected layer.
+5. Fit mean-diff, logistic, and native RFM vectors per selected layer.
 6. Compare `cos(v_lang, v_trans)` before and after fine-tuning.
 7. Run random-label controls and bootstrap confidence intervals.
 

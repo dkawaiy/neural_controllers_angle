@@ -16,7 +16,7 @@ DEVICE=${DEVICE:-mps}
 DTYPE=${DTYPE:-float16}
 MAX_STEPS=${MAX_STEPS:-60}
 BOOTSTRAP=${BOOTSTRAP:-1000}
-EXTRACTORS_STR=${EXTRACTORS:-mean_diff logistic mlp_agop}
+EXTRACTORS_STR=${EXTRACTORS:-mean_diff logistic rfm}
 SEEDS_STR=${SEEDS:-42 43 44}
 DATA_PATH=${DATA_PATH:-data/translation_synthetic/synthetic_lexicon_en_zh.jsonl}
 LAYERS=(0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23)
@@ -24,6 +24,13 @@ LATE_LAYERS=(17 18 19 20 21 22 23)
 
 read -r -a SEEDS_ARRAY <<< "$SEEDS_STR"
 read -r -a EXTRACTORS_ARRAY <<< "$EXTRACTORS_STR"
+BOOTSTRAP_EXTRA_FLAGS=()
+if [[ "${BOOTSTRAP_RFM:-0}" == "1" ]]; then
+  BOOTSTRAP_EXTRA_FLAGS+=(--bootstrap-rfm)
+fi
+if [[ "${BOOTSTRAP_MLP_AGOP:-0}" == "1" ]]; then
+  BOOTSTRAP_EXTRA_FLAGS+=(--bootstrap-mlp-agop)
+fi
 
 echo "Generating synthetic split data..."
 "$PYTHON" experiments/generate_synthetic_translation_data.py --out-path "$DATA_PATH" --seed 42
@@ -52,6 +59,7 @@ for SEED in "${SEEDS_ARRAY[@]}"; do
     --extractors "${EXTRACTORS_ARRAY[@]}" \
     --bootstrap-samples "$BOOTSTRAP" \
     --bootstrap-seed "$SEED" \
+    "${BOOTSTRAP_EXTRA_FLAGS[@]}" \
     --batch-size 4 \
     --layers "${LAYERS[@]}"
   BASE_RUN=$(ls -td artifacts/translation_angle/* | head -1)
@@ -87,6 +95,7 @@ for SEED in "${SEEDS_ARRAY[@]}"; do
     --extractors "${EXTRACTORS_ARRAY[@]}" \
     --bootstrap-samples "$BOOTSTRAP" \
     --bootstrap-seed "$SEED" \
+    "${BOOTSTRAP_EXTRA_FLAGS[@]}" \
     --batch-size 4 \
     --layers "${LAYERS[@]}"
   REAL_ANGLE=$(ls -td artifacts/translation_angle/* | head -1)
@@ -141,6 +150,7 @@ for SEED in "${SEEDS_ARRAY[@]}"; do
     --extractors "${EXTRACTORS_ARRAY[@]}" \
     --bootstrap-samples "$BOOTSTRAP" \
     --bootstrap-seed "$SEED" \
+    "${BOOTSTRAP_EXTRA_FLAGS[@]}" \
     --batch-size 4 \
     --layers "${LAYERS[@]}"
   RANDOM_ANGLE=$(ls -td artifacts/translation_angle/* | head -1)
