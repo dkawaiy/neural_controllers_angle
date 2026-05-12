@@ -34,7 +34,8 @@ The script will:
 - run geometry probes with `mean_diff`, `logistic`, and native `rfm`;
 - bootstrap mean-diff/logistic test angles; RFM is run once per layer/seed by default because bootstrapping it is much slower;
 - evaluate heldout behavior with reference-translation character F1;
-- write aggregate summaries under `artifacts/translation_rigorous_summary/`.
+- write aggregate summaries under `artifacts/translation_rigorous_summary/`;
+- write a readable final report at `artifacts/translation_rigorous_summary/<run_id>/final_report.md`.
 
 Fast smoke:
 
@@ -74,4 +75,10 @@ import torch
 print(torch.cuda.is_available(), torch.cuda.device_count())
 print(torch.ones(1, device="cuda:0"))
 PY
+```
+
+To re-render the final report for the latest completed run:
+
+```bash
+python experiments/report_translation_results.py
 ```

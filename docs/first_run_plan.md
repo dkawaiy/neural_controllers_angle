@@ -122,6 +122,7 @@ experiments/translation_angle_probe.py
 experiments/evaluate_translation_behavior.py
 experiments/compare_translation_angles.py
 experiments/summarize_translation_controls.py
+experiments/report_translation_results.py
 experiments/run_rigorous_translation_geometry.sh
 ```
 
@@ -141,6 +142,7 @@ The stricter angle probe can now:
 - run `mean_diff`, `logistic`, and native `rfm` extractors by default;
 - save both `fit_rows` and independent test `rows`;
 - preserve CI columns in comparison CSVs.
+- render `final_report.md`, `final_report.json`, and `layer_summary.csv` for readable final statistics.
 
 `rfm` calls the upstream xRFM `RFM` implementation directly and takes the top eigenvector of `agop_best_model` as the concept direction. `mlp_agop` remains available only as a Mac/MPS-safe fallback approximation.
 
