@@ -18,7 +18,12 @@ MAX_STEPS=${MAX_STEPS:-60}
 BOOTSTRAP=${BOOTSTRAP:-1000}
 EXTRACTORS_STR=${EXTRACTORS:-mean_diff logistic rfm}
 SEEDS_STR=${SEEDS:-42 43 44}
-DATA_PATH=${DATA_PATH:-data/translation_synthetic/synthetic_lexicon_en_zh.jsonl}
+DATA_SOURCE=${DATA_SOURCE:-real}
+if [[ "$DATA_SOURCE" == "synthetic" ]]; then
+  DATA_PATH=${DATA_PATH:-data/translation_synthetic/synthetic_lexicon_en_zh.jsonl}
+else
+  DATA_PATH=${DATA_PATH:-data/translation_real/en_zh_swaption20k_sample.jsonl}
+fi
 LAYERS=(0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23)
 LATE_LAYERS=(17 18 19 20 21 22 23)
 
@@ -32,8 +37,23 @@ if [[ "${BOOTSTRAP_MLP_AGOP:-0}" == "1" ]]; then
   BOOTSTRAP_EXTRA_FLAGS+=(--bootstrap-mlp-agop)
 fi
 
-echo "Generating synthetic split data..."
-"$PYTHON" experiments/generate_synthetic_translation_data.py --out-path "$DATA_PATH" --seed 42
+if [[ "$DATA_SOURCE" == "synthetic" ]]; then
+  echo "Generating synthetic split data..."
+  "$PYTHON" experiments/generate_synthetic_translation_data.py \
+    --out-path "$DATA_PATH" \
+    --seed 42 \
+    --n-finetune "${N_FINETUNE:-96}" \
+    --n-geometry-train "${N_GEOMETRY_TRAIN:-48}" \
+    --n-geometry-test "${N_GEOMETRY_TEST:-48}" \
+    --n-behavior-test "${N_BEHAVIOR_TEST:-24}"
+elif [[ -f "$DATA_PATH" ]]; then
+  echo "Using prepared real translation data: $DATA_PATH"
+else
+  echo "Missing prepared translation data: $DATA_PATH" >&2
+  echo "On an internet-enabled login node, run:" >&2
+  echo "  $PYTHON experiments/prepare_translation_dataset.py --out-path $DATA_PATH" >&2
+  exit 1
+fi
 
 if [[ "$DEVICE" == "mps" ]]; then
   echo "Checking Apple GPU / MPS..."

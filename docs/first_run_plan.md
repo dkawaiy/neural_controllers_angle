@@ -116,6 +116,7 @@ Added a stricter pipeline around the preliminary signal:
 
 ```text
 experiments/generate_synthetic_translation_data.py
+experiments/prepare_translation_dataset.py
 experiments/train_translation_lora.py
 experiments/translation_angle_probe.py
 experiments/evaluate_translation_behavior.py
@@ -124,7 +125,7 @@ experiments/summarize_translation_controls.py
 experiments/run_rigorous_translation_geometry.sh
 ```
 
-The synthetic data has four splits:
+The default server pipeline now uses a prepared real EN-ZH sample from `swaption2009/20k-en-zh-translation-pinyin-hsk`, because the first synthetic lexicon was too small for stable RFM estimates. The data files use four splits:
 
 ```text
 translation_finetune_train
@@ -148,7 +149,7 @@ The LoRA trainer can now:
 - train only selected splits via `--train-splits`;
 - run a matched random-target control via `--random-targets`.
 
-The behavior evaluator measures synthetic target-term recall on heldout behavior examples. In a smoke run, base Qwen2.5-0.5B had `0.0` term recall on synthetic mappings, which is useful because it creates measurable room for LoRA behavior improvement.
+The behavior evaluator measures synthetic target-term recall when term annotations exist, and reference-translation character F1 for real EN-ZH data.
 
 Full MPS rigorous run:
 

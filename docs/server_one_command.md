@@ -1,10 +1,25 @@
 # Server One-Command Run
 
-Clone your branch on the GPU server/container, then run one command.
+Clone your branch on the GPU server/container, prepare the real translation sample on an internet-enabled login node, then run the GPU job.
 
 ```bash
 git clone -b knowledge-geometry-experiments https://github.com/dkawaiy/neural_controllers_angle.git
 cd neural_controllers_angle
+python experiments/prepare_translation_dataset.py --out-path data/translation_real/en_zh_swaption20k_sample.jsonl
+```
+
+The default real-data sample uses `swaption2009/20k-en-zh-translation-pinyin-hsk` and writes:
+
+```text
+translation_finetune_train: 1000
+translation_geometry_train: 500
+translation_geometry_test: 500
+translation_behavior_test: 200
+```
+
+Then submit/run on a GPU node:
+
+```bash
 CUDA_VISIBLE_DEVICES=0 bash experiments/run_server_rigorous_translation_geometry.sh
 ```
 
@@ -14,11 +29,11 @@ The script will:
 - install `requirements-gpu-cu118.txt`;
 - set Hugging Face mirror via `HF_ENDPOINT=https://hf-mirror.com`;
 - run CUDA sanity checks;
-- generate synthetic lexicon splits;
+- read prepared real EN-ZH translation splits from `data/translation_real/en_zh_swaption20k_sample.jsonl`;
 - train real LoRA and random-target LoRA for seeds `42 43 44`;
 - run geometry probes with `mean_diff`, `logistic`, and native `rfm`;
 - bootstrap mean-diff/logistic test angles; RFM is run once per layer/seed by default because bootstrapping it is much slower;
-- evaluate heldout synthetic-term behavior;
+- evaluate heldout behavior with reference-translation character F1;
 - write aggregate summaries under `artifacts/translation_rigorous_summary/`.
 
 Fast smoke:
@@ -44,6 +59,9 @@ EXTRACTORS="mean_diff logistic" CUDA_VISIBLE_DEVICES=0 \
   bash experiments/run_server_rigorous_translation_geometry.sh
 
 EXTRACTORS="mean_diff logistic rfm" BOOTSTRAP_RFM=1 CUDA_VISIBLE_DEVICES=0 \
+  bash experiments/run_server_rigorous_translation_geometry.sh
+
+DATA_SOURCE=synthetic CUDA_VISIBLE_DEVICES=0 \
   bash experiments/run_server_rigorous_translation_geometry.sh
 ```
 

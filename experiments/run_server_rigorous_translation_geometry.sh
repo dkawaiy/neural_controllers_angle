@@ -56,6 +56,8 @@ EXTRACTORS="${EXTRACTORS:-mean_diff logistic rfm}"
 MODEL_ID="${MODEL_ID:-Qwen/Qwen2.5-0.5B-Instruct}"
 BOOTSTRAP_RFM="${BOOTSTRAP_RFM:-0}"
 BOOTSTRAP_MLP_AGOP="${BOOTSTRAP_MLP_AGOP:-0}"
+DATA_SOURCE="${DATA_SOURCE:-real}"
+DATA_PATH="${DATA_PATH:-data/translation_real/en_zh_swaption20k_sample.jsonl}"
 
 echo "Starting rigorous translation geometry run..."
 echo "MODEL_ID=$MODEL_ID"
@@ -66,6 +68,8 @@ echo "MAX_STEPS=$MAX_STEPS"
 echo "BOOTSTRAP=$BOOTSTRAP"
 echo "EXTRACTORS=$EXTRACTORS"
 echo "BOOTSTRAP_RFM=$BOOTSTRAP_RFM"
+echo "DATA_SOURCE=$DATA_SOURCE"
+echo "DATA_PATH=$DATA_PATH"
 
 PYTHON="$PYTHON" \
 DEVICE="$DEVICE" \
@@ -77,4 +81,6 @@ EXTRACTORS="$EXTRACTORS" \
 MODEL_ID="$MODEL_ID" \
 BOOTSTRAP_RFM="$BOOTSTRAP_RFM" \
 BOOTSTRAP_MLP_AGOP="$BOOTSTRAP_MLP_AGOP" \
+DATA_SOURCE="$DATA_SOURCE" \
+DATA_PATH="$DATA_PATH" \
 bash experiments/run_rigorous_translation_geometry.sh

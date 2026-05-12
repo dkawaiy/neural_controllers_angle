@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import csv
 import json
 import os
@@ -97,14 +98,36 @@ def generate(model, tokenizer, prompt: str, device: torch.device, max_length: in
     return tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
 
 
+def zh_char_counter(text: str) -> Counter:
+    return Counter(ch for ch in text if "\u4e00" <= ch <= "\u9fff")
+
+
+def char_f1(reference: str, output: str) -> float:
+    ref_counts = zh_char_counter(reference)
+    out_counts = zh_char_counter(output)
+    if not ref_counts or not out_counts:
+        return 0.0
+    overlap = sum((ref_counts & out_counts).values())
+    precision = overlap / max(1, sum(out_counts.values()))
+    recall = overlap / max(1, sum(ref_counts.values()))
+    if precision + recall == 0:
+        return 0.0
+    return 2 * precision * recall / (precision + recall)
+
+
 def score_output(pair: dict, output: str) -> dict:
     expected_terms = [term["zh"] for term in pair.get("terms", [])]
     hits = [term for term in expected_terms if term in output]
+    reference = pair["zh"]
+    reference_char_f1 = char_f1(reference, output)
     return {
         "expected_terms": expected_terms,
         "hit_terms": hits,
         "term_recall": len(hits) / max(1, len(expected_terms)),
         "all_terms_hit": len(hits) == len(expected_terms),
+        "has_terms": bool(expected_terms),
+        "reference_char_f1": reference_char_f1,
+        "reference_contained": reference in output,
     }
 
 
@@ -138,6 +161,9 @@ def main() -> None:
                 "hit_terms": "|".join(score["hit_terms"]),
                 "term_recall": score["term_recall"],
                 "all_terms_hit": score["all_terms_hit"],
+                "has_terms": score["has_terms"],
+                "reference_char_f1": score["reference_char_f1"],
+                "reference_contained": score["reference_contained"],
             }
         )
 
@@ -160,6 +186,9 @@ def main() -> None:
         "num_examples": len(rows),
         "mean_term_recall": sum(row["term_recall"] for row in rows) / len(rows),
         "all_terms_hit_rate": sum(bool(row["all_terms_hit"]) for row in rows) / len(rows),
+        "mean_reference_char_f1": sum(row["reference_char_f1"] for row in rows) / len(rows),
+        "reference_contained_rate": sum(bool(row["reference_contained"]) for row in rows) / len(rows),
+        "has_term_annotations": any(bool(row["has_terms"]) for row in rows),
         "rows": rows,
         "output_dir": str(output_dir),
     }

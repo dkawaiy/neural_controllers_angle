@@ -71,6 +71,9 @@ def summarize_behavior(paths: list[str], control_type: str) -> list[dict]:
                 "behavior_path": path,
                 "mean_term_recall": data["mean_term_recall"],
                 "all_terms_hit_rate": data["all_terms_hit_rate"],
+                "mean_reference_char_f1": data.get("mean_reference_char_f1"),
+                "reference_contained_rate": data.get("reference_contained_rate"),
+                "has_term_annotations": data.get("has_term_annotations"),
                 "num_examples": data["num_examples"],
             }
         )
@@ -102,10 +105,14 @@ def aggregate_behavior(rows: list[dict]) -> dict:
         subset = [row for row in rows if row["control_type"] == control_type]
         recalls = [row["mean_term_recall"] for row in subset]
         hit_rates = [row["all_terms_hit_rate"] for row in subset]
+        char_f1s = [row["mean_reference_char_f1"] for row in subset if row.get("mean_reference_char_f1") is not None]
+        contained_rates = [row["reference_contained_rate"] for row in subset if row.get("reference_contained_rate") is not None]
         aggregate[control_type] = {
             "n_seeds": len(subset),
             "mean_term_recall": statistics.mean(recalls),
             "mean_all_terms_hit_rate": statistics.mean(hit_rates),
+            "mean_reference_char_f1": statistics.mean(char_f1s) if char_f1s else None,
+            "mean_reference_contained_rate": statistics.mean(contained_rates) if contained_rates else None,
             "all_seed_values": subset,
         }
     return aggregate
