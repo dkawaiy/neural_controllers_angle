@@ -115,6 +115,38 @@ def char_f1(reference: str, output: str) -> float:
     return 2 * precision * recall / (precision + recall)
 
 
+def zh_chars(text: str) -> list[str]:
+    return [ch for ch in text if "\u4e00" <= ch <= "\u9fff"]
+
+
+def char_ngrams(chars: list[str], n: int) -> Counter:
+    if len(chars) < n:
+        return Counter()
+    return Counter("".join(chars[idx : idx + n]) for idx in range(len(chars) - n + 1))
+
+
+def chrf(reference: str, output: str, max_order: int = 6, beta: float = 2.0) -> float:
+    ref_chars = zh_chars(reference)
+    out_chars = zh_chars(output)
+    precisions, recalls = [], []
+    for order in range(1, max_order + 1):
+        ref_counts = char_ngrams(ref_chars, order)
+        out_counts = char_ngrams(out_chars, order)
+        if not ref_counts or not out_counts:
+            continue
+        overlap = sum((ref_counts & out_counts).values())
+        precisions.append(overlap / max(1, sum(out_counts.values())))
+        recalls.append(overlap / max(1, sum(ref_counts.values())))
+    if not precisions or not recalls:
+        return 0.0
+    precision = sum(precisions) / len(precisions)
+    recall = sum(recalls) / len(recalls)
+    beta_sq = beta * beta
+    if precision + recall == 0:
+        return 0.0
+    return (1 + beta_sq) * precision * recall / (beta_sq * precision + recall)
+
+
 def score_output(pair: dict, output: str) -> dict:
     expected_terms = [term["zh"] for term in pair.get("terms", [])]
     hits = [term for term in expected_terms if term in output]
@@ -127,6 +159,7 @@ def score_output(pair: dict, output: str) -> dict:
         "all_terms_hit": len(hits) == len(expected_terms),
         "has_terms": bool(expected_terms),
         "reference_char_f1": reference_char_f1,
+        "reference_chrf": chrf(reference, output),
         "reference_contained": reference in output,
     }
 
@@ -163,6 +196,7 @@ def main() -> None:
                 "all_terms_hit": score["all_terms_hit"],
                 "has_terms": score["has_terms"],
                 "reference_char_f1": score["reference_char_f1"],
+                "reference_chrf": score["reference_chrf"],
                 "reference_contained": score["reference_contained"],
             }
         )
@@ -187,6 +221,7 @@ def main() -> None:
         "mean_term_recall": sum(row["term_recall"] for row in rows) / len(rows),
         "all_terms_hit_rate": sum(bool(row["all_terms_hit"]) for row in rows) / len(rows),
         "mean_reference_char_f1": sum(row["reference_char_f1"] for row in rows) / len(rows),
+        "mean_reference_chrf": sum(row["reference_chrf"] for row in rows) / len(rows),
         "reference_contained_rate": sum(bool(row["reference_contained"]) for row in rows) / len(rows),
         "has_term_annotations": any(bool(row["has_terms"]) for row in rows),
         "rows": rows,

@@ -205,7 +205,9 @@ echo "==== Aggregate summary ===="
 
 SUMMARY_RUN=$(ls -td artifacts/translation_rigorous_summary/* | head -1)
 "$PYTHON" experiments/report_translation_results.py --summary-dir "$SUMMARY_RUN"
+"$PYTHON" experiments/report_translation_plots.py --summary-dir "$SUMMARY_RUN"
 echo
 echo "Done."
 echo "Rigorous summary: $SUMMARY_RUN"
 echo "Final report: $SUMMARY_RUN/final_report.md"
+echo "Layer plots: $SUMMARY_RUN/plots"

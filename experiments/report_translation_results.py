@@ -37,6 +37,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--out-md", default=None)
     parser.add_argument("--out-json", default=None)
     parser.add_argument("--out-layer-csv", default=None)
+    parser.add_argument(
+        "--layer-sets",
+        nargs="*",
+        default=["late_17_23:17-23", "pre_output_17_22:17-22", "final_23:23"],
+        help="Named layer sets, e.g. late_17_23:17-23 final_23:23.",
+    )
     return parser.parse_args()
 
 
@@ -127,6 +133,28 @@ def group_rows(rows: list[dict[str, Any]], *keys: str) -> dict[tuple[Any, ...], 
     return grouped
 
 
+def parse_layer_sets(items: list[str]) -> dict[str, list[int]]:
+    layer_sets = {}
+    for item in items:
+        if ":" not in item:
+            raise ValueError(f"Layer set must be name:layers, got {item!r}")
+        name, spec = item.split(":", 1)
+        layers = []
+        for part in spec.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            if "-" in part:
+                start, end = part.split("-", 1)
+                layers.extend(range(int(start), int(end) + 1))
+            else:
+                layers.append(int(part))
+        if not layers:
+            raise ValueError(f"Layer set {name!r} has no layers.")
+        layer_sets[name] = sorted(set(layers))
+    return layer_sets
+
+
 def load_detailed_layer_rows(geometry_rows: list[dict[str, Any]], summary_dir: Path) -> list[dict[str, Any]]:
     detailed = []
     seen_paths = set()
@@ -170,7 +198,9 @@ def load_detailed_layer_rows(geometry_rows: list[dict[str, Any]], summary_dir: P
 
 
 def summarize_behavior(behavior_rows: list[dict[str, Any]]) -> dict[str, Any]:
-    metric = "mean_reference_char_f1"
+    metric = "mean_reference_chrf"
+    if not any(row.get(metric) is not None for row in behavior_rows):
+        metric = "mean_reference_char_f1"
     if not any(row.get(metric) is not None for row in behavior_rows):
         metric = "mean_term_recall"
     grouped = group_rows(behavior_rows, "control_type")
@@ -182,6 +212,7 @@ def summarize_behavior(behavior_rows: list[dict[str, Any]]) -> dict[str, Any]:
             "mean_term_recall": describe([row.get("mean_term_recall") for row in rows]),
             "all_terms_hit_rate": describe([row.get("all_terms_hit_rate") for row in rows]),
             "mean_reference_char_f1": describe([row.get("mean_reference_char_f1") for row in rows]),
+            "mean_reference_chrf": describe([row.get("mean_reference_chrf") for row in rows]),
             "reference_contained_rate": describe([row.get("reference_contained_rate") for row in rows]),
             "num_examples": sorted({row.get("num_examples") for row in rows}),
         }
@@ -241,6 +272,38 @@ def summarize_geometry(geometry_rows: list[dict[str, Any]]) -> dict[str, Any]:
         }
 
     return {"by_control_extractor": by_control_extractor, "paired_real_minus_random": paired}
+
+
+def summarize_geometry_from_layers(detailed_rows: list[dict[str, Any]], layers: list[int]) -> dict[str, Any]:
+    rows = []
+    layer_set = set(layers)
+    for (control_type, seed_index, extractor), group in group_rows(detailed_rows, "control_type", "seed_index", "extractor").items():
+        subset = [row for row in group if row["layer"] in layer_set]
+        if not subset:
+            continue
+        rows.append(
+            {
+                "control_type": control_type,
+                "seed_index": seed_index,
+                "extractor": extractor,
+                "n_layers": len(subset),
+                "mean_delta_angle_degrees": sum(row["delta_angle_degrees"] for row in subset) / len(subset),
+                "mean_delta_cosine": sum(row["delta_cosine"] for row in subset) / len(subset),
+                "negative_delta_angle_layers": sum(row["delta_angle_degrees"] < 0 for row in subset),
+                "positive_delta_cosine_layers": sum(row["delta_cosine"] > 0 for row in subset),
+            }
+        )
+    return summarize_geometry(rows)
+
+
+def summarize_geometry_layer_sets(detailed_rows: list[dict[str, Any]], layer_sets: dict[str, list[int]]) -> dict[str, Any]:
+    return {
+        name: {
+            "layers": layers,
+            **summarize_geometry_from_layers(detailed_rows, layers),
+        }
+        for name, layers in layer_sets.items()
+    }
 
 
 def summarize_layers(detailed_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -337,11 +400,12 @@ def build_markdown(report: dict[str, Any], summary_dir: Path) -> str:
                 stats["primary_metric"],
                 fmt_ci(stats["primary"]),
                 fmt_ci(stats["mean_term_recall"]),
+                fmt_ci(stats["mean_reference_chrf"]),
                 fmt_ci(stats["mean_reference_char_f1"]),
                 ", ".join(str(v) for v in stats["num_examples"]),
             ]
         )
-    lines.append(markdown_table(["control", "primary", "primary mean [95% CI]", "term recall", "char F1", "n examples"], behavior_rows))
+    lines.append(markdown_table(["control", "primary", "primary mean [95% CI]", "term recall", "chrF", "char F1", "n examples"], behavior_rows))
     lines.append(f"\nReal - random primary gap: `{fmt(behavior.get('real_minus_random_gap'))}`")
 
     lines.extend(["", "## Late-Layer Geometry", ""])
@@ -375,16 +439,36 @@ def build_markdown(report: dict[str, Any], summary_dir: Path) -> str:
         )
     lines.append(markdown_table(["extractor", "real-random delta angle", "real-random delta cosine", "angle wins", "cosine wins"], paired_rows))
 
+    layer_set_summaries = report.get("layer_set_geometry", {})
+    if layer_set_summaries:
+        lines.extend(["", "## Layer-Set Checks", ""])
+        for name, layer_summary in layer_set_summaries.items():
+            lines.extend(["", f"### {name} `{layer_summary['layers']}`", ""])
+            rows = []
+            for extractor, item in sorted(layer_summary["paired_real_minus_random"].items()):
+                rows.append(
+                    [
+                        extractor,
+                        fmt_ci(item["real_minus_random_delta_angle_degrees"]),
+                        fmt_ci(item["real_minus_random_delta_cosine"], digits=4),
+                        f"{item['seeds_where_real_angle_decreased_more_than_random']}/{item['n_paired_seeds']}",
+                        f"{item['seeds_where_real_cosine_increased_more_than_random']}/{item['n_paired_seeds']}",
+                    ]
+                )
+            lines.append(markdown_table(["extractor", "real-random delta angle", "real-random delta cosine", "angle wins", "cosine wins"], rows))
+
     lines.extend(["", "## Notes", ""])
     lines.append("- Negative `delta angle` means LoRA made `v_lang` and `v_trans` closer than base.")
     lines.append("- Positive `delta cosine` means the same thing in cosine form.")
     lines.append("- In the paired table, negative `real-random delta angle` means real LoRA aligned more than random-target LoRA.")
-    lines.append("- With only three seeds, 95% CIs are deliberately wide; use them as uncertainty flags, not as a final significance test.")
+    lines.append("- Layer-set checks separate pre-output late layers from the final layer, which can behave differently near the output head.")
+    lines.append("- With few seeds, 95% CIs are deliberately wide; use them as uncertainty flags, not as a final significance test.")
     return "\n".join(lines) + "\n"
 
 
 def main() -> None:
     args = parse_args()
+    layer_sets = parse_layer_sets(args.layer_sets)
     summary_dir = Path(args.summary_dir) if args.summary_dir else latest_summary_dir(Path(args.summary_root))
     if not summary_dir.is_absolute():
         summary_dir = REPO_ROOT / summary_dir
@@ -396,6 +480,8 @@ def main() -> None:
     report = {
         "summary_dir": str(summary_dir),
         "geometry": summarize_geometry(geometry_rows),
+        "layer_sets": layer_sets,
+        "layer_set_geometry": summarize_geometry_layer_sets(detailed_rows, layer_sets),
         "behavior": summarize_behavior(behavior_rows),
         "layer_rows": layer_rows,
     }

@@ -123,6 +123,7 @@ experiments/evaluate_translation_behavior.py
 experiments/compare_translation_angles.py
 experiments/summarize_translation_controls.py
 experiments/report_translation_results.py
+experiments/report_translation_plots.py
 experiments/run_rigorous_translation_geometry.sh
 ```
 
@@ -142,7 +143,8 @@ The stricter angle probe can now:
 - run `mean_diff`, `logistic`, and native `rfm` extractors by default;
 - save both `fit_rows` and independent test `rows`;
 - preserve CI columns in comparison CSVs.
-- render `final_report.md`, `final_report.json`, and `layer_summary.csv` for readable final statistics.
+- render `final_report.md`, `final_report.json`, and `layer_summary.csv` for readable final statistics;
+- render layer-wise control and paired plots for angle/cosine deltas.
 
 `rfm` calls the upstream xRFM `RFM` implementation directly and takes the top eigenvector of `agop_best_model` as the concept direction. `mlp_agop` remains available only as a Mac/MPS-safe fallback approximation.
 
@@ -151,7 +153,7 @@ The LoRA trainer can now:
 - train only selected splits via `--train-splits`;
 - run a matched random-target control via `--random-targets`.
 
-The behavior evaluator measures synthetic target-term recall when term annotations exist, and reference-translation character F1 for real EN-ZH data.
+The behavior evaluator measures synthetic target-term recall when term annotations exist, and reference-translation chrF plus character F1 for real EN-ZH data.
 
 Full MPS rigorous run:
 
